@@ -32,7 +32,7 @@ homepage = "https://github.com/PiggyDance/ComfyUI_OpenCV"
 
 
 [tool.comfy]
-PublisherId = "PiggyDance"
+PublisherId = "piggydance"
 DisplayName = "ComfyUI_OpenCV"
 Icon = ""
 

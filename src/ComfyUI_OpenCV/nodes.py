@@ -1,118 +1,213 @@
 from inspect import cleandoc
-class Example:
+import cv2
+import numpy as np
+import torch
+
+
+class MedianBlur:
     """
-    A example node
-
-    Class methods
-    -------------
-    INPUT_TYPES (dict):
-        Tell the main program input parameters of nodes.
-    IS_CHANGED:
-        optional method to control when the node is re executed.
-
-    Attributes
-    ----------
-    RETURN_TYPES (`tuple`):
-        The type of each element in the output tulple.
-    RETURN_NAMES (`tuple`):
-        Optional: The name of each output in the output tulple.
-    FUNCTION (`str`):
-        The name of the entry-point method. For example, if `FUNCTION = "execute"` then it will run Example().execute()
-    OUTPUT_NODE ([`bool`]):
-        If this node is an output node that outputs a result/image from the graph. The SaveImage node is an example.
-        The backend iterates on these output nodes and tries to execute all their parents if their parent graph is properly connected.
-        Assumed to be False if not present.
-    CATEGORY (`str`):
-        The category the node should appear in the UI.
-    execute(s) -> tuple || None:
-        The entry point method. The name of this method must be the same as the value of property `FUNCTION`.
-        For example, if `FUNCTION = "execute"` then this method's name must be `execute`, if `FUNCTION = "foo"` then it must be `foo`.
+    Apply median blur filter to an image using OpenCV
     """
     def __init__(self):
         pass
 
     @classmethod
     def INPUT_TYPES(s):
-        """
-            Return a dictionary which contains config for all input fields.
-            Some types (string): "MODEL", "VAE", "CLIP", "CONDITIONING", "LATENT", "IMAGE", "INT", "STRING", "FLOAT".
-            Input types "INT", "STRING" or "FLOAT" are special values for fields on the node.
-            The type can be a list for selection.
-
-            Returns: `dict`:
-                - Key input_fields_group (`string`): Can be either required, hidden or optional. A node class must have property `required`
-                - Value input_fields (`dict`): Contains input fields config:
-                    * Key field_name (`string`): Name of a entry-point method's argument
-                    * Value field_config (`tuple`):
-                        + First value is a string indicate the type of field or a list for selection.
-                        + Secound value is a config for type "INT", "STRING" or "FLOAT".
-        """
         return {
             "required": {
-                "image": ("Image", { "tooltip": "This is an image"}),
-                "int_field": ("INT", {
-                    "default": 0,
-                    "min": 0, #Minimum value
-                    "max": 4096, #Maximum value
-                    "step": 64, #Slider's step
-                    "display": "number" # Cosmetic only: display as "number" or "slider"
-                }),
-                "float_field": ("FLOAT", {
-                    "default": 1.0,
-                    "min": 0.0,
-                    "max": 10.0,
-                    "step": 0.01,
-                    "round": 0.001, #The value represeting the precision to round to, will be set to the step value by default. Can be set to False to disable rounding.
-                    "display": "number"}),
-                "print_to_screen": (["enable", "disable"],),
-                "string_field": ("STRING", {
-                    "multiline": False, #True if you want the field to look like the one on the ClipTextEncode node
-                    "default": "Hello World!"
+                "image": ("IMAGE", {"tooltip": "The input image to apply median blur"}),
+                "ksize": ("INT", {
+                    "default": 5,
+                    "min": 1,
+                    "max": 99,
+                    "step": 2,  # Must be odd number
+                    "display": "slider",
+                    "tooltip": "Kernel size. Must be odd and greater than 1"
                 }),
             },
         }
 
     RETURN_TYPES = ("IMAGE",)
-    #RETURN_NAMES = ("image_output_name",)
+    RETURN_NAMES = ("image",)
+    FUNCTION = "apply_median_blur"
+    CATEGORY = "OpenCV/Filters"
     DESCRIPTION = cleandoc(__doc__)
-    FUNCTION = "test"
 
-    #OUTPUT_NODE = False
-    #OUTPUT_TOOLTIPS = ("",) # Tooltips for the output node
+    def apply_median_blur(self, image, ksize):
+        # Ensure ksize is odd
+        if ksize % 2 == 0:
+            ksize += 1
+            
+        # Convert from torch tensor [B, H, W, C] to numpy array
+        batch_size, height, width, channels = image.shape
+        result = torch.zeros_like(image)
+        
+        # Process each image in the batch
+        for b in range(batch_size):
+            # Convert to numpy and scale to 0-255 range
+            img_np = (image[b].cpu().numpy() * 255).astype(np.uint8)
+            
+            # Apply median blur
+            blurred = cv2.medianBlur(img_np, ksize)
+            
+            # Convert back to torch tensor and normalize to 0-1
+            result[b] = torch.from_numpy(blurred.astype(np.float32) / 255.0)
+            
+        return (result,)
 
-    CATEGORY = "Example"
 
-    def test(self, image, string_field, int_field, float_field, print_to_screen):
-        if print_to_screen == "enable":
-            print(f"""Your input contains:
-                string_field aka input text: {string_field}
-                int_field: {int_field}
-                float_field: {float_field}
-            """)
-        #do some processing on the image, in this example I just invert it
-        image = 1.0 - image
-        return (image,)
-
+class GaussianBlur:
     """
-        The node will always be re executed if any of the inputs change but
-        this method can be used to force the node to execute again even when the inputs don't change.
-        You can make this node return a number or a string. This value will be compared to the one returned the last time the node was
-        executed, if it is different the node will be executed again.
-        This method is used in the core repo for the LoadImage node where they return the image hash as a string, if the image hash
-        changes between executions the LoadImage node is executed again.
+    Apply Gaussian blur filter to an image using OpenCV
     """
-    #@classmethod
-    #def IS_CHANGED(s, image, string_field, int_field, float_field, print_to_screen):
-    #    return ""
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "image": ("IMAGE", {"tooltip": "The input image to apply Gaussian blur"}),
+                "ksize_x": ("INT", {
+                    "default": 5,
+                    "min": 1,
+                    "max": 99,
+                    "step": 2,  # Must be odd number
+                    "display": "slider",
+                    "tooltip": "Kernel width. Must be odd and greater than 1"
+                }),
+                "ksize_y": ("INT", {
+                    "default": 5,
+                    "min": 1,
+                    "max": 99,
+                    "step": 2,  # Must be odd number
+                    "display": "slider",
+                    "tooltip": "Kernel height. Must be odd and greater than 1"
+                }),
+                "sigma_x": ("FLOAT", {
+                    "default": 0.0,
+                    "min": 0.0,
+                    "max": 20.0,
+                    "step": 0.1,
+                    "display": "slider",
+                    "tooltip": "Gaussian kernel standard deviation in X direction"
+                }),
+                "sigma_y": ("FLOAT", {
+                    "default": 0.0,
+                    "min": 0.0,
+                    "max": 20.0,
+                    "step": 0.1,
+                    "display": "slider",
+                    "tooltip": "Gaussian kernel standard deviation in Y direction"
+                }),
+            },
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("image",)
+    FUNCTION = "apply_gaussian_blur"
+    CATEGORY = "OpenCV/Filters"
+    DESCRIPTION = cleandoc(__doc__)
+
+    def apply_gaussian_blur(self, image, ksize_x, ksize_y, sigma_x, sigma_y):
+        # Ensure ksize is odd
+        if ksize_x % 2 == 0:
+            ksize_x += 1
+        if ksize_y % 2 == 0:
+            ksize_y += 1
+            
+        # Convert from torch tensor [B, H, W, C] to numpy array
+        batch_size, height, width, channels = image.shape
+        result = torch.zeros_like(image)
+        
+        # Process each image in the batch
+        for b in range(batch_size):
+            # Convert to numpy and scale to 0-255 range
+            img_np = (image[b].cpu().numpy() * 255).astype(np.uint8)
+            
+            # Apply Gaussian blur
+            blurred = cv2.GaussianBlur(img_np, (ksize_x, ksize_y), sigma_x, sigma_y)
+            
+            # Convert back to torch tensor and normalize to 0-1
+            result[b] = torch.from_numpy(blurred.astype(np.float32) / 255.0)
+            
+        return (result,)
+
+
+class CvtColor:
+    """
+    Convert image color space using OpenCV
+    """
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "image": ("IMAGE", {"tooltip": "The input image to convert color space"}),
+                "code": (["BGR2GRAY", "GRAY2BGR", "BGR2RGB", "RGB2BGR", "BGR2HSV", "HSV2BGR", "BGR2Lab", "Lab2BGR"], {
+                    "default": "BGR2GRAY",
+                    "tooltip": "Color conversion code"
+                }),
+            },
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("image",)
+    FUNCTION = "apply_cvt_color"
+    CATEGORY = "OpenCV/Color"
+    DESCRIPTION = cleandoc(__doc__)
+
+    def apply_cvt_color(self, image, code):
+        # 转换颜色空间代码映射
+        code_map = {
+            "BGR2GRAY": cv2.COLOR_BGR2GRAY,
+            "GRAY2BGR": cv2.COLOR_GRAY2BGR,
+            "BGR2RGB": cv2.COLOR_BGR2RGB,
+            "RGB2BGR": cv2.COLOR_RGB2BGR,
+            "BGR2HSV": cv2.COLOR_BGR2HSV,
+            "HSV2BGR": cv2.COLOR_HSV2BGR,
+            "BGR2Lab": cv2.COLOR_BGR2Lab,
+            "Lab2BGR": cv2.COLOR_Lab2BGR
+        }
+        
+        # 获取图像尺寸信息
+        batch_size, height, width, channels = image.shape
+        
+        # 创建结果tensor - 移除特殊处理
+        result = torch.zeros_like(image)
+        
+        # 处理每张图片
+        for b in range(batch_size):
+            # 转换为numpy数组并缩放到0-255
+            img_np = (image[b].cpu().numpy() * 255).astype(np.uint8)
+            
+            # 应用颜色空间转换
+            converted = cv2.cvtColor(img_np, code_map[code])
+            
+            # 如果是灰度图，扩展为3通道
+            if code == "BGR2GRAY":
+                converted = np.stack([converted] * 3, axis=-1)
+            
+            # 转回torch tensor并归一化到0-1
+            result[b] = torch.from_numpy(converted.astype(np.float32) / 255.0)
+            
+        return (result,)
+
 
 
 # A dictionary that contains all nodes you want to export with their names
 # NOTE: names should be globally unique
 NODE_CLASS_MAPPINGS = {
-    "Example": Example
+    "OpenCV_MedianBlur": MedianBlur,
+    "OpenCV_GaussianBlur": GaussianBlur,
+    "OpenCV_CvtColor": CvtColor,
 }
 
 # A dictionary that contains the friendly/humanly readable titles for the nodes
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "Example": "Example Node"
+    "OpenCV_MedianBlur": "Median Blur",
+    "OpenCV_GaussianBlur": "Gaussian Blur",
+    "OpenCV_CvtColor": "Color Space Convert",
 }
